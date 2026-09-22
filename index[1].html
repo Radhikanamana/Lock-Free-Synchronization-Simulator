@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lock-Free Synchronization Simulator</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚛</div>
+    <div>
+      <h1>Lock-Free Synchronization Simulator</h1>
+      <p>Visualize atomic operations, CAS, mutex &amp; race conditions in real time</p>
+    </div>
+  </div>
+  <div class="mode-bar">
+    <span class="badge badge-race"  id="race-badge">⚠ Race condition!</span>
+    <span class="badge badge-mutex" id="mutex-badge">🔒 Mutex locked</span>
+    <button class="mode-btn active" id="btn-lockfree" onclick="setMode('lockfree')">Lock-free (CAS)</button>
+    <button class="mode-btn"        id="btn-mutex"    onclick="setMode('mutex')">Mutex</button>
+    <button class="mode-btn"        id="btn-race"     onclick="setMode('race')">Race Condition</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     MAIN GRID
+════════════════════════════════════════════════ -->
+<main>
+
+  <!-- ── Threads column ── -->
+  <div>
+    <div class="card-title">Threads</div>
+    <div id="threads-panel"></div>
+  </div>
+
+  <!-- ── Memory / CAS / Perf column ── -->
+  <div class="memory-col">
+
+    <!-- Shared Counter -->
+    <div class="counter-card">
+      <div class="counter-label">Shared Counter</div>
+      <div class="counter-value" id="counter-val">0</div>
+      <div class="counter-owner" id="counter-owner">—</div>
+    </div>
+
+    <!-- CAS Panel -->
+    <div class="cas-card" id="cas-panel">
+      <div class="card-title">CAS Operation</div>
+      <div class="cas-grid">
+        <div class="cas-field">
+          <div class="cas-field-label">Expected</div>
+          <div class="cas-field-value" id="cas-exp">—</div>
+        </div>
+        <div class="cas-field">
+          <div class="cas-field-label">Current</div>
+          <div class="cas-field-value" id="cas-cur">—</div>
+        </div>
+        <div class="cas-field">
+          <div class="cas-field-label">New value</div>
+          <div class="cas-field-value" id="cas-new">—</div>
+        </div>
+        <div class="cas-field">
+          <div class="cas-field-label">Retries</div>
+          <div class="cas-field-value" id="cas-retries">0</div>
+        </div>
+      </div>
+      <div class="cas-result" id="cas-result"></div>
+    </div>
+
+    <!-- Throughput Bars -->
+    <div class="perf-card">
+      <div class="card-title">Throughput Comparison</div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Mutex ops</span><span id="bar-m-val">0</span></div>
+        <div class="bar-track"><div class="bar-fill bar-mutex" id="bar-m" style="width:0%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Lock-free ops</span><span id="bar-lf-val">0</span></div>
+        <div class="bar-track"><div class="bar-fill bar-lf" id="bar-lf" style="width:0%"></div></div>
+      </div>
+    </div>
+
+  </div><!-- /memory-col -->
+
+  <!-- ── Logs + Stats column ── -->
+  <div class="right-col">
+    <div class="log-card" id="log-box">
+      <div class="card-title">Operation Log</div>
+      <div id="log-entries"></div>
+    </div>
+    <div class="stats-card">
+      <div class="card-title">Statistics</div>
+      <div class="stat-row"><span>Total ops</span>    <span id="stat-ops">0</span></div>
+      <div class="stat-row"><span>CAS retries</span>  <span id="stat-retries">0</span></div>
+      <div class="stat-row"><span>Lost updates</span> <span id="stat-lost">0</span></div>
+      <div class="stat-row"><span>Mode</span>         <span id="stat-mode">lock-free</span></div>
+    </div>
+  </div>
+
+  <!-- ── Controls ── -->
+  <div class="controls">
+    <button class="ctrl-btn primary" id="btn-start"  onclick="startSim()">▶ Start</button>
+    <button class="ctrl-btn"         id="btn-pause"  onclick="pauseSim()"  disabled>⏸ Pause</button>
+    <button class="ctrl-btn"                         onclick="resetSim()">↺ Reset</button>
+    <div class="sep"></div>
+    <button class="ctrl-btn" onclick="addThread()">+ Thread</button>
+    <button class="ctrl-btn" onclick="removeThread()">− Thread</button>
+    <div class="sep"></div>
+    <span class="speed-label">Speed</span>
+    <input type="range" id="speed-slider" min="1" max="5" value="3" step="1" oninput="setSpeed(this.value)">
+    <span id="speed-label" class="speed-label">3×</span>
+  </div>
+
+  <!-- ── Education Cards ── -->
+  <div class="edu-section">
+    <div class="edu-card">
+      <div class="edu-card-title">⚛ Atomic Operations</div>
+      <div class="edu-card-body">
+        An atomic operation is indivisible — it either completes entirely or not at all.
+        No other thread can observe a partial state. This is the foundation of lock-free programming.
+      </div>
+    </div>
+    <div class="edu-card">
+      <div class="edu-card-title">🔄 Compare-And-Swap (CAS)</div>
+      <div class="edu-card-body">
+        CAS checks if a memory location holds an expected value, then only updates it if it matches.
+        If another thread changed it first, CAS fails and the thread retries — no blocking needed.
+      </div>
+    </div>
+    <div class="edu-card">
+      <div class="edu-card-title">🔒 Mutex</div>
+      <div class="edu-card-body">
+        A mutex allows only one thread to enter a critical section at a time.
+        Other threads block (wait) until the lock is released. Simpler but can cause contention.
+      </div>
+    </div>
+    <div class="edu-card">
+      <div class="edu-card-title">⚡ Race Condition</div>
+      <div class="edu-card-body">
+        When two threads read the same value and both write back, one update is silently lost.
+        The final counter is lower than expected — this is called a lost update or data inconsistency.
+      </div>
+    </div>
+    <div class="edu-card">
+      <div class="edu-card-title">💀 Deadlock</div>
+      <div class="edu-card-body">
+        Deadlock occurs when two or more threads wait for each other to release locks, and none can proceed.
+        Lock-free algorithms avoid deadlock entirely by never blocking threads.
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="js/simulator.js"></script>
+</body>
+</html>
